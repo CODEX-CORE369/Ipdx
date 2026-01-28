@@ -31,8 +31,8 @@ const Data = mongoose.model('Data', dataSchema);
 
 // Self-Ping to keep alive on Render
 setInterval(() => {
-    axios.get('https://YOUR-APP-NAME.onrender.com/ping').catch(e => console.log("Ping failed"));
-}, 600000); // 10 minutes
+    axios.get('https://ipdx.onrender.com/ping').catch(e => console.log("Ping failed"));
+}, 300000); // 10 minutes
 
 app.get('/ping', (req, res) => res.send('Active'));
 
